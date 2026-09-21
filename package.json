@@ -1,0 +1,20 @@
+{
+  "name": "remote-pc",
+  "productName": "Remote PC",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cliente de escritorio remoto para idupi-server: streaming de pantalla y control remoto.",
+  "type": "module",
+  "main": "main.mjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "serve": "node scripts/serve.mjs"
+  },
+  "dependencies": {
+    "electron": "^33.2.0"
+  }
+}

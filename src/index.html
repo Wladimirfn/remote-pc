@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self' http: https:; object-src 'none'; base-uri 'none'" />
+  <title>Remote PC · Escritorio remoto</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/connection.css" />
+  <link rel="stylesheet" href="css/viewer.css" />
+</head>
+<body>
+  <main id="app">
+    <section id="connection-screen" class="screen connection" aria-labelledby="connection-title">
+      <div class="connection__glow" aria-hidden="true"></div>
+
+      <form id="connection-form" class="connection__card" autocomplete="off" novalidate>
+        <header class="connection__header">
+          <div class="brand">
+            <span class="brand__mark" aria-hidden="true">RPC</span>
+            <div class="brand__text">
+              <h1 id="connection-title">Remote PC</h1>
+              <p class="brand__subtitle">Cliente de escritorio remoto</p>
+            </div>
+          </div>
+          <span id="connection-badge" class="badge" data-state="idle">Desconectado</span>
+        </header>
+
+        <div class="field">
+          <label for="input-host">Host</label>
+          <input id="input-host" name="host" type="text" spellcheck="false" placeholder="localhost" value="localhost" required />
+          <p class="field__hint">Acepta <code>localhost</code>, una IP o una URL completa con <code>http://</code> / <code>https://</code>.</p>
+        </div>
+
+        <div class="field-row">
+          <div class="field field--port">
+            <label for="input-port">Puerto</label>
+            <input id="input-port" name="port" type="number" inputmode="numeric" min="1" max="65535" step="1" value="8788" />
+          </div>
+
+          <div class="field field--grow">
+            <label for="input-token">Token de acceso</label>
+            <div class="input-affix">
+              <input id="input-token" name="token" type="password" spellcheck="false" placeholder="Bearer token" />
+              <button id="btn-toggle-token" class="affix-button" type="button" aria-label="Mostrar token">ver</button>
+            </div>
+          </div>
+        </div>
+
+        <p id="connection-error" class="connection__error" role="alert" hidden></p>
+
+        <button id="btn-connect" class="button button--primary button--block" type="submit">
+          <span id="btn-connect-label">Conectar</span>
+        </button>
+
+        <ul class="connection__shortcuts">
+          <li><kbd>Ctrl</kbd><span>+</span><kbd>Alt</kbd><span>+</span><kbd>1</kbd>…<kbd>9</kbd> cambiar de monitor</li>
+          <li><kbd>F11</kbd> pantalla completa · <kbd>Esc</kbd> salir / barra superior</li>
+        </ul>
+      </form>
+    </section>
+
+    <section id="viewer-screen" class="screen viewer" aria-label="Visor remoto" hidden>
+      <div id="viewer-stage" class="viewer__stage">
+        <canvas id="remote-canvas" class="viewer__canvas" width="1280" height="720"></canvas>
+      </div>
+
+      <div id="viewer-status" class="viewer__status" hidden>
+        <span class="spinner" aria-hidden="true"></span>
+        <p id="viewer-status-text">Conectando…</p>
+        <button id="viewer-status-action" class="button button--ghost" type="button" hidden>Volver</button>
+      </div>
+
+      <div id="topbar-zone" class="topbar-zone" aria-hidden="true"></div>
+
+      <header id="topbar" class="topbar" data-visible="false">
+        <div class="topbar__inner">
+          <div id="topbar-monitors" class="topbar__group topbar__group--monitors" role="group" aria-label="Monitores"></div>
+
+          <span class="topbar__divider" aria-hidden="true"></span>
+
+          <div id="topbar-quality" class="topbar__group topbar__group--quality" role="group" aria-label="Calidad"></div>
+
+          <span class="topbar__divider" aria-hidden="true"></span>
+
+          <div class="topbar__hud" aria-live="off">
+            <span class="hud__item"><b id="hud-fps">0</b><em>FPS</em></span>
+            <span class="hud__item"><b id="hud-latency">0</b><em>ms</em></span>
+            <span class="hud__item"><b id="hud-bytes">0 KB</b><em>frame</em></span>
+            <span class="hud__item"><b id="hud-quality">auto</b><em>calidad</em></span>
+          </div>
+
+          <span class="topbar__divider" aria-hidden="true"></span>
+
+          <div class="topbar__group">
+            <button id="btn-fullscreen" class="icon-button" type="button" title="Pantalla completa (F11)" aria-label="Pantalla completa">⛶</button>
+            <button id="btn-disconnect" class="button button--danger" type="button">Desconectar</button>
+          </div>
+        </div>
+      </header>
+    </section>
+  </main>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
