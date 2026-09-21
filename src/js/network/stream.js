@@ -148,17 +148,11 @@ export class ScreenStream {
 
   async #handleFrame({ meta, jpeg }) {
     const startedAt = performance.now();
-    let bitmap = null;
 
     try {
-      if (jpeg.byteLength > 0) {
-        bitmap = await createImageBitmap(new Blob([jpeg], { type: 'image/jpeg' }));
-      }
-      await this.#handlers.onFrame?.({ meta, bitmap, jpegBytes: jpeg.byteLength });
+      await this.#handlers.onFrame?.({ meta, jpeg, jpegBytes: jpeg?.byteLength ?? 0 });
     } catch (error) {
       console.error('[stream] no se pudo renderizar el frame', error);
-    } finally {
-      bitmap?.close?.();
     }
 
     const bytes = Number(meta?.bytes) || jpeg.byteLength;

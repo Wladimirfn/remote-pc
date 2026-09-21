@@ -67,30 +67,82 @@ export class CanvasView {
     }
   }
 
-  draw(meta, bitmap) {
-    if (!bitmap) return;
+  async renderFrame(meta, jpeg) {
+    if (!meta) return;
 
-    const targetWidth = Number(meta?.w) || bitmap.width;
-    const targetHeight = Number(meta?.h) || bitmap.height;
-    const resized = this.setRemoteSize(targetWidth, targetHeight);
-    const ctx = this.#ctx;
-
-    let drawn = false;
-    const tiles = Array.isArray(meta?.tiles) ? meta.tiles : null;
-    const isFullFrame = bitmap.width === this.#remoteWidth && bitmap.height === this.#remoteHeight;
-
-    if (!resized && tiles?.length && !isFullFrame) {
-      for (const tile of tiles) {
-        if (!tile) continue;
-        const tileWidth = Number(tile.w) || bitmap.width;
-        const tileHeight = Number(tile.h) || bitmap.height;
-        if (tileWidth !== bitmap.width || tileHeight !== bitmap.height) continue;
-        ctx.drawImage(bitmap, Math.round(tile.x) || 0, Math.round(tile.y) || 0);
-        drawn = true;
-      }
+    const w = Number(meta.w) || 0;
+    const h = Number(meta.h) || 0;
+    if (w && h) {
+      this.setRemoteSize(w, h);
     }
 
-    if (!drawn) ctx.drawImage(bitmap, 0, 0);
+    const ctx = this.#ctx;
+
+    // Manejo de dirty tiles (hito 8): actualización incremental de pantalla
+    if (meta.type === 'tiles') {
+      const tiles = Array.isArray(meta.tiles) ? meta.tiles : [];
+      if (tiles.length === 0 || !jpeg || jpeg.byteLength === 0) {
+        // Pantalla sin cambios: frame vacío para telemetría de pacing
+        return;
+      }
+
+      const tw = Number(meta.tw) || 64;
+      const th = Number(meta.th) || 64;
+      const cols = Math.ceil((w || this.#remoteWidth || 1920) / tw);
+
+      let offset = 0;
+      const tileJobs = [];
+
+      for (const tile of tiles) {
+        const len = Number(tile.len);
+        if (!len || offset + len > jpeg.byteLength) break;
+        const chunk = jpeg.subarray(offset, offset + len);
+        offset += len;
+
+        const left = (Number(tile.i) % cols) * tw;
+        const top = Math.floor(Number(tile.i) / cols) * th;
+
+        tileJobs.push(
+          createImageBitmap(new Blob([chunk], { type: 'image/jpeg' }))
+            .then((bmp) => ({ bmp, left, top }))
+            .catch((err) => {
+              console.warn('[canvas] error al decodificar tile', tile.i, err);
+              return null;
+            })
+        );
+      }
+
+      const decoded = await Promise.all(tileJobs);
+      for (const item of decoded) {
+        if (item?.bmp) {
+          ctx.drawImage(item.bmp, item.left, item.top);
+          item.bmp.close();
+        }
+      }
+      this.#hasFrame = true;
+      return;
+    }
+
+    // Keyframe / full JPEG
+    if (jpeg && jpeg.byteLength > 0) {
+      try {
+        const blob = new Blob([jpeg], { type: 'image/jpeg' });
+        const bitmap = await createImageBitmap(blob);
+        ctx.drawImage(bitmap, 0, 0);
+        bitmap.close();
+        this.#hasFrame = true;
+      } catch (err) {
+        console.error('[canvas] error al decodificar keyframe', err);
+      }
+    }
+  }
+
+  draw(meta, bitmap) {
+    if (!bitmap) return;
+    const targetWidth = Number(meta?.w) || bitmap.width;
+    const targetHeight = Number(meta?.h) || bitmap.height;
+    this.setRemoteSize(targetWidth, targetHeight);
+    this.#ctx.drawImage(bitmap, 0, 0);
     this.#hasFrame = true;
   }
 

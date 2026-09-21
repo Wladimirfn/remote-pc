@@ -265,9 +265,9 @@ async function stopStream() {
   if (stream) await stream.stop();
 }
 
-function handleFrame(stream, { meta, bitmap }) {
+async function handleFrame(stream, { meta, jpeg }) {
   if (session.stream !== stream) return;
-  views.canvasView.draw(meta, bitmap);
+  await views.canvasView.renderFrame(meta, jpeg);
 
   const remoteWidth = Number(meta?.w) || 0;
   const remoteHeight = Number(meta?.h) || 0;
