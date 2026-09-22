@@ -402,6 +402,9 @@ async function setExtraMonitor(enabled, { silent = false } = {}) {
   const width = Math.max(1280, Math.round((window.screen?.width || 1920) * (dpr > 1.5 ? 1 : dpr)));
   const height = Math.max(720, Math.round((window.screen?.height || 1080) * (dpr > 1.5 ? 1 : dpr)));
 
+  const previousNames = new Set(session.monitors.map((m) => m.name));
+  const previousCount = session.monitors.length;
+
   try {
     // Pausamos el stream antes de cambiar la topología de pantallas en Windows
     // para que ningún capture concurrente choque con el cambio de modo gráfico (WM_DISPLAYCHANGE).
@@ -410,21 +413,26 @@ async function setExtraMonitor(enabled, { silent = false } = {}) {
     const result = await api.setVirtualDisplay({ enabled, width, height });
     if (session.api !== api) return;
 
-    await wait(250);
+    await wait(350);
 
-    const monitors = normalizeMonitors(result?.monitors?.length ? result.monitors : await api.getMonitors());
+    // Consultamos de nuevo api.getMonitors() tras el settle de DWM para asegurar
+    // que el monitor N+1 recién agregado aparezca enumerado junto a los físicos.
+    const freshPayload = await api.getMonitors().catch(() => result?.monitors);
+    const monitors = normalizeMonitors(freshPayload?.length ? freshPayload : result?.monitors);
     session.monitors = monitors;
     store.set({ monitors });
 
-    session.extraMonitorActive = Boolean(result?.active ?? enabled);
+    const addedMonitor = monitors.find((monitor) => !previousNames.has(monitor.name));
+    const hasAddedMonitor = Boolean(addedMonitor) || monitors.length > previousCount;
+    session.extraMonitorActive = enabled ? Boolean(result?.active ?? hasAddedMonitor) : false;
     patch('stream', { extraMonitor: session.extraMonitorActive });
 
     const requestedId = Number(result?.monitorId);
     let target;
     if (session.extraMonitorActive) {
       target =
+        addedMonitor ??
         (Number.isFinite(requestedId) ? monitors.find((monitor) => monitor.id === requestedId) : null) ??
-        [...monitors].reverse().find((monitor) => !monitor.primary) ??
         monitors[monitors.length - 1];
     } else {
       target = monitors.find((monitor) => monitor.primary) ?? monitors[0];

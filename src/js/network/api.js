@@ -165,7 +165,7 @@ export class ScreenApi {
         height: Number(height) || 1080,
       },
       signal,
-      timeoutMs: 15000,
+      timeoutMs: 35000,
     });
   }
 
