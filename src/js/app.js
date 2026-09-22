@@ -403,8 +403,14 @@ async function setExtraMonitor(enabled, { silent = false } = {}) {
   const height = Math.max(720, Math.round((window.screen?.height || 1080) * (dpr > 1.5 ? 1 : dpr)));
 
   try {
+    // Pausamos el stream antes de cambiar la topología de pantallas en Windows
+    // para que ningún capture concurrente choque con el cambio de modo gráfico (WM_DISPLAYCHANGE).
+    await stopStream();
+
     const result = await api.setVirtualDisplay({ enabled, width, height });
     if (session.api !== api) return;
+
+    await wait(250);
 
     const monitors = normalizeMonitors(result?.monitors?.length ? result.monitors : await api.getMonitors());
     session.monitors = monitors;
@@ -431,10 +437,18 @@ async function setExtraMonitor(enabled, { silent = false } = {}) {
     views.topbarView.setMonitors(monitors, session.monitorId);
     views.canvasView.setRemoteSize(target.width, target.height);
 
-    await startStream({ silent: true });
+    const started = await startStream({ silent: true });
+    if (!started && session.api === api) {
+      await wait(400);
+      await startStream({ silent: true });
+    }
   } catch (error) {
     const message = error?.message || 'No se pudo cambiar el modo Monitor Extra.';
     console.warn('[extra-monitor]', message);
+    if (session.api === api && !session.stream) {
+      await wait(300);
+      await startStream({ silent: true });
+    }
   } finally {
     session.extraMonitorBusy = false;
     views.topbarView.setExtraMonitor(session.extraMonitorActive, false);
