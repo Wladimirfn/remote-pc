@@ -11,6 +11,7 @@ import { TopbarView } from './ui/topbar.js';
 const desktop = window.idupiDesktop ?? null;
 const VIEWPORT_RESTART_DELAY = 700;
 const VIEWPORT_RESTART_RATIO = 0.15;
+const FULLSCREEN_SETTLE_DELAY = 250;
 
 const session = {
   api: null,
@@ -20,7 +21,10 @@ const session = {
   monitors: [],
   quality: 'auto',
   streamViewport: null,
+  streamEpoch: 0,
   viewportTimer: 0,
+  healTimer: 0,
+  restoreQualityTimer: 0,
   moveInFlight: false,
   pendingMove: null,
 };
@@ -29,6 +33,10 @@ let views = null;
 
 function nextFrame() {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function createSessionId() {
@@ -60,12 +68,43 @@ function inputContext() {
   };
 }
 
+function scheduleKeyframeHeal(delayMs = 320) {
+  clearTimeout(session.healTimer);
+  clearTimeout(session.restoreQualityTimer);
+  session.healTimer = setTimeout(async () => {
+    session.healTimer = 0;
+    const api = session.api;
+    const sid = session.sid;
+    const targetQuality = session.quality || 'auto';
+    if (!api || !sid || !session.stream?.running) return;
+    try {
+      await api.setQuality({ sid, quality: 73 });
+      session.restoreQualityTimer = setTimeout(() => {
+        session.restoreQualityTimer = 0;
+        if (session.api === api && session.sid === sid) {
+          api.setQuality({ sid, quality: targetQuality }).catch(() => {});
+        }
+      }, 90);
+    } catch {
+      /* el stream puede estar reconectando */
+    }
+  }, delayMs);
+}
+
 function sendInput(payload) {
   const api = session.api;
   if (!api) return;
 
   if (payload.type !== 'move') {
     api.sendInput(payload).catch((error) => console.warn('[input]', error.message));
+    if (
+      payload.type === 'up' ||
+      payload.type === 'click' ||
+      (payload.type === 'keyUp' &&
+        (payload.code === 'Escape' || payload.code === 'Enter' || payload.code === 'F4' || payload.code === 'KeyW'))
+    ) {
+      scheduleKeyframeHeal(320);
+    }
     return;
   }
 
@@ -193,8 +232,12 @@ async function connect(profile) {
   if (target?.width && target?.height) views.canvasView.setRemoteSize(target.width, target.height);
 
   await enterFullscreen();
+  await wait(FULLSCREEN_SETTLE_DELAY);
   await nextFrame();
   views.canvasView.fit();
+
+  const settled = views.canvasView.viewport;
+  session.streamViewport = settled.width && settled.height ? { ...settled } : null;
 
   const started = await startStream();
   if (!started) {
@@ -214,11 +257,14 @@ async function startStream({ silent = false } = {}) {
   if (!silent) setStatusOverlay('loading', 'Conectando al monitor…');
 
   const viewport = views.canvasView.viewport;
+  const epoch = (session.streamEpoch = (session.streamEpoch || 0) + 1);
+  session.sid = createSessionId();
 
   const stream = new ScreenStream({
     api,
     onFrame: (payload) => handleFrame(stream, payload),
     onControl: (message) => handleControl(stream, message),
+    onStale: (error) => handleStreamStale(stream, error),
     onStats: (stats) => {
       if (session.stream !== stream) return;
       patch('metrics', stats);
@@ -229,15 +275,25 @@ async function startStream({ silent = false } = {}) {
 
   session.stream = stream;
   session.streamViewport = viewport.width && viewport.height ? { ...viewport } : null;
-  patch('stream', { status: 'starting', monitorId: session.monitorId, quality: session.quality, error: null });
+  patch('stream', {
+    status: 'starting',
+    sid: session.sid,
+    monitorId: session.monitorId,
+    quality: session.quality,
+    error: null,
+  });
+
+  const jitter = (epoch % 3) * 2;
+  const width = Math.max(320, Math.round(viewport.width || 1920) - jitter);
+  const height = Math.max(240, Math.round(viewport.height || 1080) - jitter);
 
   try {
     await stream.start({
       sid: session.sid,
       monitor: session.monitorId,
       quality: session.quality,
-      viewportW: viewport.width || 1920,
-      viewportH: viewport.height || 1080,
+      viewportW: width,
+      viewportH: height,
     });
   } catch (error) {
     if (session.stream === stream) {
@@ -252,12 +308,17 @@ async function startStream({ silent = false } = {}) {
 
   patch('stream', { status: 'streaming', error: null });
   setStatusOverlay(null);
+  scheduleKeyframeHeal(220);
   return true;
 }
 
 async function stopStream() {
   clearTimeout(session.viewportTimer);
+  clearTimeout(session.healTimer);
+  clearTimeout(session.restoreQualityTimer);
   session.viewportTimer = 0;
+  session.healTimer = 0;
+  session.restoreQualityTimer = 0;
   session.pendingMove = null;
 
   const stream = session.stream;
@@ -292,6 +353,12 @@ function handleStreamFailure(stream, error) {
   setStatusOverlay('error', message, 'Volver');
 }
 
+function handleStreamStale(stream, error) {
+  if (session.stream !== stream) return;
+  console.warn('[stream] reinicio automático:', error?.message || 'sin actividad');
+  void startStream({ silent: true });
+}
+
 async function switchMonitor(monitorId) {
   if (!session.api || monitorId === session.monitorId) return;
   const monitor = session.monitors.find((item) => item.id === monitorId);
@@ -307,10 +374,23 @@ async function switchMonitor(monitorId) {
 
 async function changeQuality(quality) {
   if (!session.api || quality === session.quality) return;
+  const api = session.api;
+  const sid = session.sid;
   session.quality = quality;
   patch('stream', { quality });
   views.topbarView.setQuality(quality);
-  await startStream();
+
+  if (sid) {
+    try {
+      await api.setQuality({ sid, quality });
+      return;
+    } catch (error) {
+      console.warn('[quality] cambio en vivo no disponible:', error.message);
+    }
+    if (session.api !== api || session.quality !== quality) return;
+  }
+
+  await startStream({ silent: true });
 }
 
 function handleViewportChange({ width, height }) {
@@ -373,10 +453,15 @@ function wireBus() {
     if (monitor) void switchMonitor(monitor.id);
   });
   bus.on(Events.QualityChange, (quality) => void changeQuality(quality));
+  bus.on(Events.RefreshStream, () => void startStream({ silent: true }));
   bus.on(Events.ToggleFullscreen, () => void toggleFullscreen());
+  bus.on(Events.ToggleTopbar, () => views.topbarView.toggle());
   bus.on(Events.Escape, () => {
+    if (views.topbarView.visible) {
+      views.topbarView.hide();
+      return;
+    }
     if (store.get().ui.fullscreen) void exitFullscreen();
-    else views.topbarView.toggle();
   });
   bus.on(Events.Disconnect, () => void disconnect());
 }
@@ -399,11 +484,11 @@ function bootstrap() {
     statusText: document.querySelector('#viewer-status-text'),
     statusAction: document.querySelector('#viewer-status-action'),
     topbar: document.querySelector('#topbar'),
-    topbarZone: document.querySelector('#topbar-zone'),
+    topbarTrigger: document.querySelector('#topbar-trigger'),
   };
 
   const canvasView = new CanvasView(els.canvas, { stage: els.stage, onViewportChange: handleViewportChange });
-  const topbarView = new TopbarView({ root: els.topbar, zone: els.topbarZone });
+  const topbarView = new TopbarView({ root: els.topbar, trigger: els.topbarTrigger });
   const connectionView = new ConnectionView({ form: els.form, onConnect: connect });
 
   views = { els, canvasView, topbarView, connectionView };

@@ -118,6 +118,12 @@ export class KeyboardController {
         bus.emit(Events.MonitorSelectIndex, Number(match[1]));
         return;
       }
+
+      if (event.code === 'KeyM') {
+        event.preventDefault();
+        bus.emit(Events.ToggleTopbar);
+        return;
+      }
     }
 
     if (event.key === 'F11') {

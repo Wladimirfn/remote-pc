@@ -157,6 +157,15 @@ export class ScreenApi {
     });
   }
 
+  setQuality({ sid, quality }, { signal } = {}) {
+    return this.request('/api/v1/screen/quality', {
+      method: 'POST',
+      body: { sid, quality },
+      signal,
+      timeoutMs: 6000,
+    });
+  }
+
   sendInput(payload, { signal } = {}) {
     return this.request('/api/v1/screen/input', {
       method: 'POST',

@@ -28,15 +28,17 @@ npm run serve    # servidor estático en http://localhost:5500 (para navegador)
 
 1. Introduce host, puerto y token. Las credenciales se guardan en `localStorage`.
 2. Al conectar se validan `GET /api/v1/screen/config` y `GET /api/v1/screen/monitors`, y arranca el stream del monitor principal.
-3. La barra superior aparece al acercar el cursor a los 20 px superiores de la pantalla.
+3. La barra de control está anclada en la parte inferior. Ábrela con el botón flotante **⚙️ Menú · Monitores** (abajo al centro) o con `Ctrl`+`Alt`+`M`. El borde superior (`y = 0..50 px`, pestañas del navegador y botones minimizar/maximizar/cerrar) queda siempre libre: nada lo intercepta.
+4. La barra se cierra al pulsar `Esc`, al hacer clic fuera de ella (sobre la pantalla remota) o con el botón **✕ Ocultar**. El botón **🔄 Refrescar** fuerza un keyframe completo en cualquier momento.
 
 ### Atajos
 
 | Atajo | Acción |
 | --- | --- |
 | `Ctrl` + `Alt` + `1..9` | Cambiar de monitor |
+| `Ctrl` + `Alt` + `M` | Mostrar/ocultar la barra de control |
 | `F11` | Alternar pantalla completa |
-| `Esc` | Salir de pantalla completa o mostrar/ocultar la barra |
+| `Esc` | Cerrar la barra de control o salir de pantalla completa |
 
 ## Arquitectura
 

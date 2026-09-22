@@ -3,6 +3,8 @@ import { MessageKind, ProtocolDecoder } from './protocol.js';
 
 const STATS_INTERVAL = 300;
 const FPS_WINDOW = 1500;
+const WATCHDOG_INTERVAL = 1000;
+const WATCHDOG_TIMEOUT = 3500;
 
 export class ScreenStream {
   #api;
@@ -12,6 +14,9 @@ export class ScreenStream {
   #decoder = null;
   #loopPromise = null;
   #statsTimer = 0;
+  #watchdogTimer = 0;
+  #lastFrameAt = 0;
+  #staleNotified = false;
   #running = false;
   #session = { sid: null, monitor: null, quality: 'auto' };
   #frameTimes = [];
@@ -26,9 +31,9 @@ export class ScreenStream {
     serverQuality: null,
   };
 
-  constructor({ api, onFrame, onControl, onError, onEnd, onStats }) {
+  constructor({ api, onFrame, onControl, onStale, onError, onEnd, onStats }) {
     this.#api = api;
-    this.#handlers = { onFrame, onControl, onError, onEnd, onStats };
+    this.#handlers = { onFrame, onControl, onStale, onError, onEnd, onStats };
     this.#stats.quality = null;
   }
 
@@ -72,9 +77,12 @@ export class ScreenStream {
     }
 
     this.#running = true;
+    this.#staleNotified = false;
+    this.#lastFrameAt = performance.now();
     this.#reader = response.body.getReader();
     this.#decoder = new ProtocolDecoder();
     this.#statsTimer = setInterval(() => this.#emitStats(), STATS_INTERVAL);
+    this.#watchdogTimer = setInterval(() => this.#checkWatchdog(), WATCHDOG_INTERVAL);
     this.#loopPromise = this.#consume();
 
     return this.#stats;
@@ -87,6 +95,11 @@ export class ScreenStream {
     if (this.#statsTimer) {
       clearInterval(this.#statsTimer);
       this.#statsTimer = 0;
+    }
+
+    if (this.#watchdogTimer) {
+      clearInterval(this.#watchdogTimer);
+      this.#watchdogTimer = 0;
     }
 
     const reader = this.#reader;
@@ -148,6 +161,7 @@ export class ScreenStream {
 
   async #handleFrame({ meta, jpeg }) {
     const startedAt = performance.now();
+    this.#lastFrameAt = startedAt;
 
     try {
       await this.#handlers.onFrame?.({ meta, jpeg, jpegBytes: jpeg?.byteLength ?? 0 });
@@ -176,8 +190,25 @@ export class ScreenStream {
       });
       this.#stats.latencyMs = Math.round(performance.now() - ackStartedAt);
     } catch (error) {
-      if (error?.name !== 'AbortError') console.warn('[stream] ACK rechazado:', error.message);
+      if (error?.name === 'AbortError') return;
+      if (error instanceof ApiError && (error.status === 404 || error.status === 410)) {
+        this.#notifyStale(error);
+        return;
+      }
+      console.warn('[stream] ACK rechazado:', error.message);
     }
+  }
+
+  #checkWatchdog() {
+    if (!this.#running) return;
+    if (performance.now() - this.#lastFrameAt < WATCHDOG_TIMEOUT) return;
+    this.#notifyStale(new ApiError('La transmisión dejó de recibir imágenes.', { code: 'stale' }));
+  }
+
+  #notifyStale(error) {
+    if (!this.#running || this.#staleNotified) return;
+    this.#staleNotified = true;
+    this.#handlers.onStale?.(error);
   }
 
   #handleControl(message) {

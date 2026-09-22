@@ -72,23 +72,30 @@ export class CanvasView {
 
     const w = Number(meta.w) || 0;
     const h = Number(meta.h) || 0;
-    if (w && h) {
+    const isTiles = meta.type === 'tiles';
+
+    if (w && h && (!isTiles || !this.#hasFrame || !this.#remoteWidth || !this.#remoteHeight)) {
       this.setRemoteSize(w, h);
     }
 
     const ctx = this.#ctx;
 
     // Manejo de dirty tiles (hito 8): actualización incremental de pantalla
-    if (meta.type === 'tiles') {
+    if (isTiles) {
       const tiles = Array.isArray(meta.tiles) ? meta.tiles : [];
       if (tiles.length === 0 || !jpeg || jpeg.byteLength === 0) {
         // Pantalla sin cambios: frame vacío para telemetría de pacing
         return;
       }
 
+      const frameW = w || this.#remoteWidth || 1920;
+      const frameH = h || this.#remoteHeight || 1080;
+      const scaleX = this.#remoteWidth && frameW ? this.#remoteWidth / frameW : 1;
+      const scaleY = this.#remoteHeight && frameH ? this.#remoteHeight / frameH : 1;
+
       const tw = Number(meta.tw) || 64;
       const th = Number(meta.th) || 64;
-      const cols = Math.ceil((w || this.#remoteWidth || 1920) / tw);
+      const cols = Math.ceil(frameW / tw);
 
       let offset = 0;
       const tileJobs = [];
@@ -115,7 +122,17 @@ export class CanvasView {
       const decoded = await Promise.all(tileJobs);
       for (const item of decoded) {
         if (item?.bmp) {
-          ctx.drawImage(item.bmp, item.left, item.top);
+          if (scaleX !== 1 || scaleY !== 1) {
+            ctx.drawImage(
+              item.bmp,
+              item.left * scaleX,
+              item.top * scaleY,
+              item.bmp.width * scaleX,
+              item.bmp.height * scaleY,
+            );
+          } else {
+            ctx.drawImage(item.bmp, item.left, item.top);
+          }
           item.bmp.close();
         }
       }

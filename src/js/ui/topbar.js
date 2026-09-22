@@ -11,7 +11,6 @@ const QUALITIES = Object.freeze([
 
 const HIDE_DELAY = 1400;
 const HUD_INTERVAL = 220;
-const REVEAL_ZONE = 20;
 
 function formatBytes(bytes) {
   const value = Number(bytes) || 0;
@@ -22,7 +21,7 @@ function formatBytes(bytes) {
 
 export class TopbarView {
   #root;
-  #zone;
+  #trigger;
   #els;
   #hideTimer = 0;
   #hudTimer = 0;
@@ -30,9 +29,9 @@ export class TopbarView {
   #lastPaint = 0;
   #unsubscribe = null;
 
-  constructor({ root, zone }) {
+  constructor({ root, trigger }) {
     this.#root = root;
-    this.#zone = zone;
+    this.#trigger = trigger;
     this.#els = {
       monitors: root.querySelector('#topbar-monitors'),
       quality: root.querySelector('#topbar-quality'),
@@ -41,24 +40,32 @@ export class TopbarView {
       bytes: root.querySelector('#hud-bytes'),
       qualityValue: root.querySelector('#hud-quality'),
       fullscreen: root.querySelector('#btn-fullscreen'),
+      refresh: root.querySelector('#btn-refresh'),
+      hideButton: root.querySelector('#btn-hide-topbar'),
       disconnect: root.querySelector('#btn-disconnect'),
     };
   }
 
+  get visible() {
+    return this.#root.dataset.visible === 'true';
+  }
+
   mount() {
     this.#buildQualityButtons();
-    this.#zone.addEventListener('mouseenter', () => this.show());
+    this.#trigger.addEventListener('click', () => this.toggle());
     this.#root.addEventListener('mouseenter', () => this.cancelHide());
     this.#root.addEventListener('mouseleave', () => this.scheduleHide());
     this.#root.addEventListener('pointerdown', () => this.cancelHide());
     this.#els.fullscreen.addEventListener('click', () => bus.emit(Events.ToggleFullscreen));
+    this.#els.refresh.addEventListener('click', () => bus.emit(Events.RefreshStream));
+    this.#els.hideButton.addEventListener('click', () => this.hide());
     this.#els.disconnect.addEventListener('click', () => bus.emit(Events.Disconnect));
-    window.addEventListener('mousemove', this.#onPointerMove);
+    document.addEventListener('pointerdown', this.#onDocumentPointerDown);
     this.#unsubscribe = store.subscribe((state) => this.#schedulePaint(state), { immediate: true });
   }
 
   destroy() {
-    window.removeEventListener('mousemove', this.#onPointerMove);
+    document.removeEventListener('pointerdown', this.#onDocumentPointerDown);
     this.cancelHide();
     clearTimeout(this.#hudTimer);
     this.#unsubscribe?.();
@@ -109,18 +116,20 @@ export class TopbarView {
 
   show() {
     this.cancelHide();
-    if (this.#root.dataset.visible === 'true') return;
+    if (this.visible) return;
     this.#root.dataset.visible = 'true';
+    this.#trigger.setAttribute('aria-expanded', 'true');
   }
 
   hide() {
     this.cancelHide();
-    if (this.#root.dataset.visible === 'false') return;
+    if (!this.visible) return;
     this.#root.dataset.visible = 'false';
+    this.#trigger.setAttribute('aria-expanded', 'false');
   }
 
   toggle() {
-    if (this.#root.dataset.visible === 'true') this.hide();
+    if (this.visible) this.hide();
     else this.show();
   }
 
@@ -135,13 +144,20 @@ export class TopbarView {
     this.cancelHide();
     this.#hideTimer = setTimeout(() => {
       this.#hideTimer = 0;
-      if (this.#root.matches(':hover') || this.#zone.matches(':hover')) {
+      if (this.#root.matches(':hover') || this.#trigger.matches(':hover')) {
         this.scheduleHide();
         return;
       }
       this.hide();
     }, delay);
   }
+
+  #onDocumentPointerDown = (event) => {
+    if (!this.visible) return;
+    const target = event.target;
+    if (this.#root.contains(target) || this.#trigger.contains(target)) return;
+    this.hide();
+  };
 
   #buildQualityButtons() {
     const container = this.#els.quality;
@@ -158,10 +174,6 @@ export class TopbarView {
       container.append(button);
     }
   }
-
-  #onPointerMove = (event) => {
-    if (event.clientY <= REVEAL_ZONE) this.show();
-  };
 
   #schedulePaint(state) {
     this.#pendingState = state;
