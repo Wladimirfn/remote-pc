@@ -39,6 +39,7 @@ export class TopbarView {
       latency: root.querySelector('#hud-latency'),
       bytes: root.querySelector('#hud-bytes'),
       qualityValue: root.querySelector('#hud-quality'),
+      audio: root.querySelector('#btn-audio'),
       fullscreen: root.querySelector('#btn-fullscreen'),
       refresh: root.querySelector('#btn-refresh'),
       hideButton: root.querySelector('#btn-hide-topbar'),
@@ -56,6 +57,7 @@ export class TopbarView {
     this.#root.addEventListener('mouseenter', () => this.cancelHide());
     this.#root.addEventListener('mouseleave', () => this.scheduleHide());
     this.#root.addEventListener('pointerdown', () => this.cancelHide());
+    this.#els.audio?.addEventListener('click', () => bus.emit(Events.ToggleAudio));
     this.#els.fullscreen.addEventListener('click', () => bus.emit(Events.ToggleFullscreen));
     this.#els.refresh.addEventListener('click', () => bus.emit(Events.RefreshStream));
     this.#els.hideButton.addEventListener('click', () => this.hide());
@@ -112,6 +114,12 @@ export class TopbarView {
   setFullscreen(isFullscreen) {
     this.#els.fullscreen.textContent = isFullscreen ? '🗗' : '⛶';
     this.#els.fullscreen.title = isFullscreen ? 'Salir de pantalla completa (F11)' : 'Pantalla completa (F11)';
+  }
+
+  setAudioMuted(isMuted) {
+    if (!this.#els.audio) return;
+    this.#els.audio.textContent = isMuted ? '🔇' : '🔊';
+    this.#els.audio.title = isMuted ? 'Activar audio remoto' : 'Silenciar audio remoto';
   }
 
   show() {

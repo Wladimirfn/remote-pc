@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, ipcMain, net, protocol, shell } from 'electron';
+import { app, BrowserWindow, Menu, clipboard, ipcMain, net, protocol, shell } from 'electron';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -8,6 +8,8 @@ const SRC_DIR = path.join(__dirname, 'src');
 const APP_SCHEME = 'idupi';
 const APP_HOST = 'app';
 const isDev = process.argv.includes('--dev');
+
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -128,6 +130,23 @@ ipcMain.handle('window:toggle-fullscreen', (event) => {
 ipcMain.handle('window:is-fullscreen', (event) => {
   const win = windowFromEvent(event);
   return Boolean(win?.isFullScreen());
+});
+
+ipcMain.handle('clipboard:read', () => {
+  try {
+    return clipboard.readText() ?? '';
+  } catch {
+    return '';
+  }
+});
+
+ipcMain.handle('clipboard:write', (_event, text) => {
+  try {
+    clipboard.writeText(String(text ?? ''));
+    return true;
+  } catch {
+    return false;
+  }
 });
 
 ipcMain.handle('app:info', () => ({

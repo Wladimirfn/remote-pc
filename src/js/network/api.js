@@ -175,6 +175,31 @@ export class ScreenApi {
     });
   }
 
+  getClipboard({ signal } = {}) {
+    return this.request('/api/v1/screen/clipboard', {
+      method: 'GET',
+      signal,
+      timeoutMs: 4000,
+    });
+  }
+
+  setClipboard(text, { signal } = {}) {
+    return this.request('/api/v1/screen/clipboard', {
+      method: 'POST',
+      body: { text: String(text ?? '') },
+      signal,
+      timeoutMs: 4000,
+    });
+  }
+
+  openAudioStream({ signal } = {}) {
+    return fetch(this.url('/api/v1/screen/audio'), {
+      headers: this.authHeaders({ Accept: 'application/octet-stream' }),
+      signal,
+      cache: 'no-store',
+    });
+  }
+
   openStream({ sid, monitor, viewportW, viewportH, quality }, { signal } = {}) {
     const params = new URLSearchParams({
       sid: String(sid),

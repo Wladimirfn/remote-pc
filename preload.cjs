@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('idupiDesktop', {
   setFullscreen: (value) => ipcRenderer.invoke('window:set-fullscreen', Boolean(value)),
   toggleFullscreen: () => ipcRenderer.invoke('window:toggle-fullscreen'),
   isFullscreen: () => ipcRenderer.invoke('window:is-fullscreen'),
+  readClipboard: () => ipcRenderer.invoke('clipboard:read'),
+  writeClipboard: (text) => ipcRenderer.invoke('clipboard:write', String(text ?? '')),
   appInfo: () => ipcRenderer.invoke('app:info'),
   onFullscreenChange: (listener) => {
     if (typeof listener !== 'function') return () => {};

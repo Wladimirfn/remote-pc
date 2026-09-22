@@ -1,5 +1,7 @@
+import { AudioStreamPlayer } from './audio/player.js';
 import { bus, Events } from './core/events.js';
 import { patch, resetState, store } from './core/state.js';
+import { ClipboardController } from './input/clipboard.js';
 import { MouseController } from './input/mouse.js';
 import { KeyboardController } from './input/keyboard.js';
 import { ScreenApi, normalizeBaseUrl } from './network/api.js';
@@ -65,6 +67,7 @@ function inputContext() {
     monitor: session.monitorId,
     enabled: Boolean(session.api) && store.get().config.remoteInputEnabled,
     send: sendInput,
+    isTopbarVisible: () => Boolean(views?.topbarView?.visible),
   };
 }
 
@@ -96,6 +99,9 @@ function sendInput(payload) {
   if (!api) return;
 
   if (payload.type !== 'move') {
+    if (payload.type === 'down') {
+      void views?.clipboard?.pushToRemote();
+    }
     api.sendInput(payload).catch((error) => console.warn('[input]', error.message));
     if (
       payload.type === 'up' ||
@@ -104,6 +110,9 @@ function sendInput(payload) {
         (payload.code === 'Escape' || payload.code === 'Enter' || payload.code === 'F4' || payload.code === 'KeyW'))
     ) {
       scheduleKeyframeHeal(320);
+      if (payload.type === 'up' || payload.type === 'click') {
+        views?.clipboard?.schedulePullFromRemote(240);
+      }
     }
     return;
   }
@@ -143,6 +152,8 @@ function setStatusOverlay(state, message, actionLabel = null) {
 
 function setFullscreenState(value) {
   const isFullscreen = Boolean(value);
+  if (isFullscreen) views?.keyboard?.lockSystemKeyboard();
+  else views?.keyboard?.unlockSystemKeyboard();
   if (store.get().ui.fullscreen === isFullscreen) return;
   patch('ui', { fullscreen: isFullscreen });
   views.topbarView.setFullscreen(isFullscreen);
@@ -245,6 +256,11 @@ async function connect(profile) {
     await teardown();
     throw new Error(message);
   }
+
+  views.clipboard.reset();
+  void views.clipboard.pushToRemote();
+  void views.audio.start(api);
+  views.topbarView.setAudioMuted(views.audio.muted);
 
   return { ...profile, baseUrl };
 }
@@ -411,6 +427,9 @@ function handleViewportChange({ width, height }) {
 
 async function teardown() {
   await stopStream();
+  await views.audio?.stop();
+  views.clipboard?.reset();
+  views.keyboard?.unlockSystemKeyboard();
   session.api = null;
   session.sid = null;
   session.monitors = [];
@@ -454,6 +473,11 @@ function wireBus() {
   });
   bus.on(Events.QualityChange, (quality) => void changeQuality(quality));
   bus.on(Events.RefreshStream, () => void startStream({ silent: true }));
+  bus.on(Events.ToggleAudio, () => {
+    if (!views.audio) return;
+    const muted = views.audio.toggleMute();
+    views.topbarView.setAudioMuted(muted);
+  });
   bus.on(Events.ToggleFullscreen, () => void toggleFullscreen());
   bus.on(Events.ToggleTopbar, () => views.topbarView.toggle());
   bus.on(Events.Escape, () => {
@@ -469,7 +493,10 @@ function wireBus() {
 function wireLifecycle() {
   window.addEventListener('resize', () => views.canvasView.fit());
   document.addEventListener('fullscreenchange', () => setFullscreenState(Boolean(document.fullscreenElement)));
-  window.addEventListener('beforeunload', () => void session.stream?.stop());
+  window.addEventListener('beforeunload', () => {
+    void session.stream?.stop();
+    void views?.audio?.stop();
+  });
   desktop?.onFullscreenChange?.((value) => setFullscreenState(value));
 }
 
@@ -490,18 +517,25 @@ function bootstrap() {
   const canvasView = new CanvasView(els.canvas, { stage: els.stage, onViewportChange: handleViewportChange });
   const topbarView = new TopbarView({ root: els.topbar, trigger: els.topbarTrigger });
   const connectionView = new ConnectionView({ form: els.form, onConnect: connect });
+  const clipboard = new ClipboardController({
+    getApi: () => session.api,
+    getInputContext: inputContext,
+  });
+  const audio = new AudioStreamPlayer();
 
-  views = { els, canvasView, topbarView, connectionView };
+  views = { els, canvasView, topbarView, connectionView, clipboard, audio };
   views.mouse = new MouseController(els.canvas, { getContext: inputContext });
-  views.keyboard = new KeyboardController({ getContext: inputContext });
+  views.keyboard = new KeyboardController({ getContext: inputContext, clipboard });
 
   topbarView.mount();
   connectionView.mount();
+  clipboard.attach();
   views.mouse.attach();
   views.keyboard.attach();
 
   els.statusAction.addEventListener('click', () => void disconnect());
   topbarView.setFullscreen(false);
+  topbarView.setAudioMuted(false);
 
   wireBus();
   wireLifecycle();
