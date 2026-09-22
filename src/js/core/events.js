@@ -39,6 +39,7 @@ export const Events = Object.freeze({
   MonitorSelectIndex: 'stream:monitor-select-index',
   QualityChange: 'stream:quality-change',
   RefreshStream: 'stream:refresh',
+  ToggleExtraMonitor: 'stream:toggle-extra-monitor',
   ToggleAudio: 'ui:toggle-audio',
   ToggleFullscreen: 'ui:toggle-fullscreen',
   ToggleTopbar: 'ui:toggle-topbar',

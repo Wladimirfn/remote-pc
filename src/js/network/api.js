@@ -148,6 +148,27 @@ export class ScreenApi {
     return this.request('/api/v1/screen/monitors', { signal });
   }
 
+  getVirtualDisplay({ signal } = {}) {
+    return this.request('/api/v1/screen/virtual-display', {
+      method: 'GET',
+      signal,
+      timeoutMs: 8000,
+    });
+  }
+
+  setVirtualDisplay({ enabled, width, height }, { signal } = {}) {
+    return this.request('/api/v1/screen/virtual-display', {
+      method: 'POST',
+      body: {
+        enabled: Boolean(enabled),
+        width: Number(width) || 1920,
+        height: Number(height) || 1080,
+      },
+      signal,
+      timeoutMs: 15000,
+    });
+  }
+
   ack({ sid, frameId, bytes, renderMs }, { signal } = {}) {
     return this.request('/api/v1/screen/ack', {
       method: 'POST',

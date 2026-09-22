@@ -34,6 +34,7 @@ export class ConnectionView {
       submitLabel: form.querySelector('#btn-connect-label'),
       error: form.querySelector('#connection-error'),
       badge: form.querySelector('#connection-badge'),
+      extraMonitor: form.querySelector('#field-extra-monitor'),
     };
   }
 
@@ -77,7 +78,13 @@ export class ConnectionView {
   }
 
   save(profile) {
-    writeStorage({ host: profile.host, port: profile.port ?? '', token: profile.token, baseUrl: profile.baseUrl ?? '' });
+    writeStorage({
+      host: profile.host,
+      port: profile.port ?? '',
+      token: profile.token,
+      baseUrl: profile.baseUrl ?? '',
+      extraMonitor: Boolean(profile.extraMonitor),
+    });
   }
 
   #restore() {
@@ -86,6 +93,7 @@ export class ConnectionView {
     if (saved.host) this.#els.host.value = saved.host;
     if (saved.port !== undefined && saved.port !== null && saved.port !== '') this.#els.port.value = saved.port;
     if (saved.token) this.#els.token.value = saved.token;
+    if (this.#els.extraMonitor) this.#els.extraMonitor.checked = Boolean(saved.extraMonitor);
   }
 
   #toggleToken = () => {
@@ -116,7 +124,7 @@ export class ConnectionView {
       }
     }
 
-    return { host, port: portNumber, token };
+    return { host, port: portNumber, token, extraMonitor: Boolean(this.#els.extraMonitor?.checked) };
   }
 
   #onSubmit = async (event) => {

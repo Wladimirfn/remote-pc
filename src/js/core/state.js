@@ -49,6 +49,7 @@ export function createInitialState() {
       monitorId: null,
       quality: 'auto',
       serverQuality: null,
+      extraMonitor: false,
       error: null,
     },
     metrics: {

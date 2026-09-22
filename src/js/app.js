@@ -29,6 +29,8 @@ const session = {
   restoreQualityTimer: 0,
   moveInFlight: false,
   pendingMove: null,
+  extraMonitorActive: false,
+  extraMonitorBusy: false,
 };
 
 let views = null;
@@ -262,6 +264,8 @@ async function connect(profile) {
   void views.audio.start(api);
   views.topbarView.setAudioMuted(views.audio.muted);
 
+  if (profile.extraMonitor) await setExtraMonitor(true, { silent: true });
+
   return { ...profile, baseUrl };
 }
 
@@ -388,6 +392,55 @@ async function switchMonitor(monitorId) {
   await startStream();
 }
 
+async function setExtraMonitor(enabled, { silent = false } = {}) {
+  if (!session.api || session.extraMonitorBusy) return;
+  const api = session.api;
+  session.extraMonitorBusy = true;
+  views.topbarView.setExtraMonitor(session.extraMonitorActive, true);
+
+  const dpr = window.devicePixelRatio || 1;
+  const width = Math.max(1280, Math.round((window.screen?.width || 1920) * (dpr > 1.5 ? 1 : dpr)));
+  const height = Math.max(720, Math.round((window.screen?.height || 1080) * (dpr > 1.5 ? 1 : dpr)));
+
+  try {
+    const result = await api.setVirtualDisplay({ enabled, width, height });
+    if (session.api !== api) return;
+
+    const monitors = normalizeMonitors(result?.monitors?.length ? result.monitors : await api.getMonitors());
+    session.monitors = monitors;
+    store.set({ monitors });
+
+    session.extraMonitorActive = Boolean(result?.active ?? enabled);
+    patch('stream', { extraMonitor: session.extraMonitorActive });
+
+    const requestedId = Number(result?.monitorId);
+    let target;
+    if (session.extraMonitorActive) {
+      target =
+        (Number.isFinite(requestedId) ? monitors.find((monitor) => monitor.id === requestedId) : null) ??
+        [...monitors].reverse().find((monitor) => !monitor.primary) ??
+        monitors[monitors.length - 1];
+    } else {
+      target = monitors.find((monitor) => monitor.primary) ?? monitors[0];
+    }
+    if (!target) throw new Error('El servidor no reportó monitores tras cambiar el modo Monitor Extra.');
+    if (session.api !== api) return;
+
+    session.monitorId = target.id;
+    patch('stream', { monitorId: target.id });
+    views.topbarView.setMonitors(monitors, session.monitorId);
+    views.canvasView.setRemoteSize(target.width, target.height);
+
+    await startStream({ silent: true });
+  } catch (error) {
+    const message = error?.message || 'No se pudo cambiar el modo Monitor Extra.';
+    console.warn('[extra-monitor]', message);
+  } finally {
+    session.extraMonitorBusy = false;
+    views.topbarView.setExtraMonitor(session.extraMonitorActive, false);
+  }
+}
+
 async function changeQuality(quality) {
   if (!session.api || quality === session.quality) return;
   const api = session.api;
@@ -427,6 +480,9 @@ function handleViewportChange({ width, height }) {
 
 async function teardown() {
   await stopStream();
+  if (session.extraMonitorActive && session.api) {
+    await session.api.setVirtualDisplay({ enabled: false }).catch(() => {});
+  }
   await views.audio?.stop();
   views.clipboard?.reset();
   views.keyboard?.unlockSystemKeyboard();
@@ -436,6 +492,8 @@ async function teardown() {
   session.monitorId = null;
   session.streamViewport = null;
   session.moveInFlight = false;
+  session.extraMonitorActive = false;
+  session.extraMonitorBusy = false;
 
   views.canvasView.reset();
   setStatusOverlay(null);
@@ -473,6 +531,7 @@ function wireBus() {
   });
   bus.on(Events.QualityChange, (quality) => void changeQuality(quality));
   bus.on(Events.RefreshStream, () => void startStream({ silent: true }));
+  bus.on(Events.ToggleExtraMonitor, () => void setExtraMonitor(!session.extraMonitorActive));
   bus.on(Events.ToggleAudio, () => {
     if (!views.audio) return;
     const muted = views.audio.toggleMute();
@@ -495,6 +554,9 @@ function wireLifecycle() {
   document.addEventListener('fullscreenchange', () => setFullscreenState(Boolean(document.fullscreenElement)));
   window.addEventListener('beforeunload', () => {
     void session.stream?.stop();
+    if (session.extraMonitorActive && session.api) {
+      void session.api.setVirtualDisplay({ enabled: false }).catch(() => {});
+    }
     void views?.audio?.stop();
   });
   desktop?.onFullscreenChange?.((value) => setFullscreenState(value));

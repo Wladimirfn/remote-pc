@@ -40,6 +40,7 @@ export class TopbarView {
       bytes: root.querySelector('#hud-bytes'),
       qualityValue: root.querySelector('#hud-quality'),
       audio: root.querySelector('#btn-audio'),
+      extraMonitor: root.querySelector('#btn-extra-monitor'),
       fullscreen: root.querySelector('#btn-fullscreen'),
       refresh: root.querySelector('#btn-refresh'),
       hideButton: root.querySelector('#btn-hide-topbar'),
@@ -58,6 +59,7 @@ export class TopbarView {
     this.#root.addEventListener('mouseleave', () => this.scheduleHide());
     this.#root.addEventListener('pointerdown', () => this.cancelHide());
     this.#els.audio?.addEventListener('click', () => bus.emit(Events.ToggleAudio));
+    this.#els.extraMonitor?.addEventListener('click', () => bus.emit(Events.ToggleExtraMonitor));
     this.#els.fullscreen.addEventListener('click', () => bus.emit(Events.ToggleFullscreen));
     this.#els.refresh.addEventListener('click', () => bus.emit(Events.RefreshStream));
     this.#els.hideButton.addEventListener('click', () => this.hide());
@@ -120,6 +122,14 @@ export class TopbarView {
     if (!this.#els.audio) return;
     this.#els.audio.textContent = isMuted ? '🔇' : '🔊';
     this.#els.audio.title = isMuted ? 'Activar audio remoto' : 'Silenciar audio remoto';
+  }
+
+  setExtraMonitor(active, busy = false) {
+    const button = this.#els.extraMonitor;
+    if (!button) return;
+    button.dataset.active = String(Boolean(active));
+    button.disabled = Boolean(busy);
+    button.textContent = busy ? '⏳ Extendiendo…' : active ? '🖥️ Extra Activo' : '🖥️ Monitor Extra';
   }
 
   show() {
@@ -205,6 +215,10 @@ export class TopbarView {
 
     for (const button of this.#els.quality.querySelectorAll('.pill')) {
       button.dataset.active = String(button.dataset.quality === stream.quality);
+    }
+
+    if (this.#els.extraMonitor) {
+      this.#els.extraMonitor.dataset.active = String(Boolean(stream.extraMonitor));
     }
   }
 }

@@ -189,6 +189,12 @@ export class KeyboardController {
         bus.emit(Events.RefreshStream);
         return;
       }
+
+      if (event.code === 'KeyE') {
+        event.preventDefault();
+        bus.emit(Events.ToggleExtraMonitor);
+        return;
+      }
     }
 
     if (event.key === 'F11') {

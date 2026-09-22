@@ -49,6 +49,11 @@
 
         <p id="connection-error" class="connection__error" role="alert" hidden></p>
 
+        <label class="field field--checkbox" for="field-extra-monitor">
+          <input id="field-extra-monitor" name="extraMonitor" type="checkbox" />
+          <span>🖥️ Usar como <strong>Monitor Extra</strong> (extender escritorio al conectar)</span>
+        </label>
+
         <button id="btn-connect" class="button button--primary button--block" type="submit">
           <span id="btn-connect-label">Conectar</span>
         </button>
@@ -102,6 +107,7 @@
           <span class="topbar__divider" aria-hidden="true"></span>
 
           <div class="topbar__group">
+            <button id="btn-extra-monitor" class="pill" type="button" data-active="false" title="Activar / desactivar Modo Monitor Extra extendido (Ctrl+Alt+E)">🖥️ Monitor Extra</button>
             <button id="btn-audio" class="icon-button" type="button" title="Silenciar / activar audio remoto" aria-label="Audio remoto">🔊</button>
             <button id="btn-refresh" class="icon-button" type="button" title="Refrescar imagen (keyframe completo)" aria-label="Refrescar">🔄</button>
             <button id="btn-fullscreen" class="icon-button" type="button" title="Pantalla completa (F11)" aria-label="Pantalla completa">⛶</button>
